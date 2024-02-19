@@ -9,4 +9,8 @@ In order to run the code:
 
 (3) Move eLife_Grid_anchoring_2024 to within in_vivo_ephys_openephys
 
+(4) Create a conda environment using grid_behaviour.yml (conda env create -f grid_behaviour.yml)
+
 (4) Run code within eLife_Grid_anchoring_2024 using data provided at datashare (add link)
+
+(5) ammend paths for saving plots where appropriate
