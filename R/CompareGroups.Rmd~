@@ -1,0 +1,29 @@
+# Setup
+
+```{r}
+library(tidyverse)
+```
+
+
+# load data
+```{r}
+cells_data <- readRDS(file = "cells_df.Rda")
+```
+
+# look at data
+Replicate Figure 2F
+
+```{r}
+ggplot(cells_data, aes(Lomb_classifier_, mean_firing_rate_vr)) +
+    geom_boxplot()
+
+ggplot(cells_data, aes(Lomb_classifier_, spatial_information_score)) +
+    geom_boxplot()
+
+
+```
+
+# fit 
+
+
+

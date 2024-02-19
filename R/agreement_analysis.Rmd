@@ -1,0 +1,226 @@
+---
+title: "Agreement analysis"
+author: "Harry Clark and Matt Nolan"
+date: "01/11/2023"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(broom)
+library(lme4)
+library(Matrix)
+library(lmerTest)
+library(emmeans)
+library(glmmTMB)
+```
+
+# subset the data acccording to trial type
+```{r}
+
+agreement_df <- read_rds(file="agreement_df.Rda")
+
+
+reformat_agreement <- function(df) {
+    df$classifier_i[df$classifier_i != "G"] <- "NG"
+    df$classifier_j[df$classifier_j != "G"] <- "NG"
+    df$comp <- as_factor(paste(df$classifier_i,df$classifier_j, sep="_"))
+    df$agreement <- unlist(df$agreement)
+    df$shuffled <- unlist(df$shuffled)
+    df$cluster_id_i <- unlist(df$cluster_id_i)
+    df$cluster_id_j <- unlist(df$cluster_id_j)
+
+    df
+}
+
+agreement_df <- reformat_agreement(agreement_df)
+
+# Make a version of the data frame excluding pairs that are completely identical (agreement = 1) or different (agreement = 0)
+agreement_df_ex <- agreement_df[agreement_df$agreement != 0,]
+agreement_df_ex <- agreement_df_ex[agreement_df_ex$agreement != 1,]
+
+# squeeze data to modify 0s and 1s
+agreement_df$agreement_s <- (agreement_df$agreement*(length(agreement_df$agreement)-1) + 0.5)/length(agreement_df$agreement)
+```
+
+
+# look at the data
+```{r}
+ggplot(agreement_df[agreement_df$shuffled==0,], aes(comp, agreement)) +
+    geom_violin() +
+    geom_jitter(alpha = 0.05)
+```
+
+# Mixed effect model to compare three groups (experimental data only)
+Problem with this is that the data is bounded between 0 and 1, and errors are unlikely to follow a normal distribution.
+```{r}
+formula_all <- formula(agreement ~ comp + (1 | mouse_id / session_id))
+
+all_mod <- lmerTest::lmer(formula = formula_all, data = agreement_df[agreement_df$shuffled==0,])
+
+# This version takes longer but generated correct df
+cons <- emmeans(all_mod, "comp", pbkrtest.limit = 20000, lmerTest.limit=20000)
+#cons <- emmeans(all_mod, "comp")
+pairs(cons)
+pwpm(cons)
+
+plot(cons)
+```
+
+# Try using a beta distribution instead to model the data
+This can be fit with the glmmTB package
+
+```{r}
+model_full <- glmmTMB(agreement_s ~ comp + (1 | mouse_id / session_id), data = agreement_df[agreement_df$shuffled==0,], family = beta_family())
+
+
+model_null<- glmmTMB(agreement_s ~ (1 | mouse_id / session_id), data = agreement_df[agreement_df$shuffled==0,], family = beta_family())
+
+# compare models
+anova(model_full, model_null)
+
+# Use emmeans to evaluate factors
+comps <- emmeans(model_full, "comp")
+pairs(comps)
+pwpm(comps)
+
+plot(comps)
+```
+
+Try again but using df with 0s and 1s excluded. 
+```{r}
+model_full <- glmmTMB(agreement ~ comp + (1 | mouse_id / session_id), data = agreement_df_ex[agreement_df_ex$shuffled==0,], family = beta_family())
+
+
+model_null<- glmmTMB(agreement ~ (1 | mouse_id / session_id), data = agreement_df_ex[agreement_df_ex$shuffled==0,], family = beta_family())
+
+# compare models
+anova(model_full, model_null)
+
+# Use emmeans to evaluate factors
+comps <- emmeans(model_full, "comp")
+pairs(comps)
+pwpm(comps)
+
+plot(comps)
+```
+
+This seems potentially problematic. Significance looks 'better' with 1s and 0s excluded but there is no good reason to do this.
+
+# Use differences instead
+Try similar analysis but comparing differences for each cell pair between it's agreement score and the average of the corresponding shuffled agreement scores.
+
+
+```{r}
+c_a_df <- read_rds(file="compiled_agreement_df.Rda")
+
+c_a_re_df <- reformat_agreement(c_a_df)
+
+c_a_re_df <- pivot_wider(c_a_re_df, names_from = "shuffled", values_from = "agreement")
+
+c_a_re_df$diff <- c_a_re_df$'0' - c_a_re_df$'1'
+```
+
+Plot to replication 4E top.
+```{r}
+ggplot(c_a_re_df, aes(comp, diff)) +
+    geom_violin() +
+    geom_jitter(alpha = 0.05)
+
+```
+
+Now fit model to the differences
+
+```{r}
+formula_all <- formula(diff ~ comp + (1 | mouse_id / session_id))
+
+all_mod <- lmerTest::lmer(formula = formula_all, data = c_a_re_df)
+
+# This version takes longer but generated correct df
+cons <- emmeans(all_mod, "comp", pbkrtest.limit = 20000, lmerTest.limit=20000)
+# This version is faster
+#cons <- emmeans(all_mod, "comp")
+pairs(cons)
+# Compact visualisation of comparisons
+pwpm(cons)
+
+plot(cons)
+
+```
+
+
+Or use more complex model
+```{r}
+formula_all <- formula(diff ~ comp + (1 | mouse_id / session_id / cluster_id_i) + (1 | mouse_id / session_id / cluster_id_j))
+
+all_mod <- lmerTest::lmer(formula = formula_all, data = c_a_re_df)
+
+# This version takes longer but generated correct df
+#cons <- emmeans(all_mod, "comp", pbkrtest.limit = 20000, lmerTest.limit=20000)
+# This version is faster
+cons <- emmeans(all_mod, "comp")
+pairs(cons)
+# Compact visualisation of comparisons
+pwpm(cons)
+
+plot(cons)
+
+```
+
+# Next compare agreement scores between shuffled and data groups
+This is for analyses for Figure 4E bottom.
+
+Use data with agreement scores of 1 and 0 removed, 'agreement_df_ex'
+Assume delta distributions for agreement scores.
+```{r}
+
+mod_fit <- function(df, comp_str = "G_G") {
+
+    mod_data <- df[df$comp==comp_str,]
+
+    model_full <- glmmTMB(agreement ~ shuffled + (1 | mouse_id / session_id), data = mod_data, family = beta_family())
+
+    model_null <- glmmTMB(agreement ~ (1 | mouse_id / session_id), data = mod_data, family = beta_family())
+    
+    model_comp <- anova(model_full, model_null)
+
+    return(model_comp)
+}
+
+model_comp_1 <- mod_fit(df = agreement_df_ex, comp_str =  "G_G")
+model_comp_1
+
+model_comp_2 <- mod_fit(df = agreement_df_ex, comp_str = "G_NG")
+model_comp_2
+
+model_comp_3 <- mod_fit(df = agreement_df_ex, comp_str = "NG_NG")
+model_comp_3
+```
+
+
+Repeat with a model that also accounts for cluster_id. Think of this as cluster_id_j is nested within cluster_id_i, which in turn is nested within session and then within mouse.
+```{r}
+
+mod_fit <- function(df, comp_str = "G_G") {
+
+    mod_data <- df[df$comp==comp_str,]
+
+    model_full <- glmmTMB(agreement ~ shuffled + (1 | mouse_id / session_id / cluster_id_i / cluster_id_j), data = mod_data, family = beta_family())
+
+    model_null <- glmmTMB(agreement ~ (1 | mouse_id / session_id / cluster_id_i / cluster_id_j), data = mod_data, family = beta_family())
+    
+    model_comp <- anova(model_full, model_null)
+
+    return(model_comp)
+}
+
+model_comp_1 <- mod_fit(df = agreement_df_ex, comp_str =  "G_G")
+model_comp_1
+
+model_comp_2 <- mod_fit(df = agreement_df_ex, comp_str = "G_NG")
+model_comp_2
+
+model_comp_3 <- mod_fit(df = agreement_df_ex, comp_str = "NG_NG")
+model_comp_3
+```
+

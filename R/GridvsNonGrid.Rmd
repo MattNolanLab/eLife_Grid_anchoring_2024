@@ -1,0 +1,122 @@
+---
+title: "Analysis of spatial information during common grid modes"
+author: "Harry Clark and Matt Nolan"
+date: "01/11/2023"
+output: html_document
+---
+
+# Setup
+```{r}
+library(tidyverse)
+library(lme4)
+library(emmeans)
+```
+
+# load data and create R friendly data tables
+```{r}
+cells_data <- readRDS(file = "cells_df_singular_values.Rda") %>%
+    rename (
+        TAG_si = "rolling:position_spatial_information_scores_Isec",
+        TIG_si = "rolling:distance_spatial_information_scores_Isec",
+        TAG_fr = "rolling:position_mean_firing_rate",
+        TIG_fr = "rolling:distance_mean_firing_rate",
+        during_D = "spatial_information_during_D",
+        during_P = "spatial_information_during_P"
+        )
+
+cells_data$Lomb_classifier_ <- as_factor(cells_data$Lomb_classifier_)
+cells_data$grid_cell <- unlist(cells_data$grid_cell)
+cells_data <- cells_data[is.na(cells_data$grid_cell) != 1,] # remove NaNs
+cells_data$grid_cell <- as_factor(cells_data$grid_cell)
+levels(cells_data$grid_cell)[levels(cells_data$grid_cell) == "1"] <- "G"
+levels(cells_data$grid_cell)[levels(cells_data$grid_cell) == "0"] <- "NG"
+
+
+### make tidy frame
+cells_G_NG_reform <- select(cells_data, cluster_id, session_id, mouse, grid_cell, TAG_si, TIG_si) %>%
+    pivot_longer(TAG_si:TIG_si, names_to = "mode", values_to = "si")
+
+### Add firing rates
+frs <- select(cells_data, TAG_fr, TIG_fr) %>%
+    pivot_longer(TAG_fr:TIG_fr, names_to = "mode", values_to = "fr")
+
+cells_G_NG_reform$fr <- frs$fr
+
+cells_G_NG_reform$mode <- as.factor(cells_G_NG_reform$mode)
+
+```
+
+# Recreate Figure 4F left
+This is based on when individual cells are in TA vs TI modes (not what's shown in 4F)
+```{r}
+ggplot(data = cells_data, aes(TAG_si, TIG_si, colour = grid_cell)) +
+    geom_point(alpha = 0.5, size = 4) +
+    geom_abline(intercept = 0, slope = 1) +
+    coord_trans(y ='log10', x='log10')
+
+```
+
+This is when the consensus for the network is in TA (P) vs TI (D) modes
+```{r}
+ggplot(data = cells_data, aes(during_P, during_D, colour = as_factor(grid_cell))) +
+    geom_point(alpha = 0.5, size = 4) +
+    geom_abline(intercept = 0, slope = 1) +
+    coord_trans(y ='log10', x='log10')
+
+```
+
+# Does the slope differ between grid and non-grid populations?
+```{r}
+TA_TI_si_full_mod <- lmer(log(TAG_si) ~ log(TIG_si) * grid_cell + (1 | mouse / session_id), data = cells_data)
+
+TA_TI_si_red_mod <- lmer(log(TAG_si) ~ log(TIG_si) + (1 | mouse / session_id), data = cells_data) 
+
+anova(TA_TI_si_full_mod, TA_TI_si_red_mod)
+```
+Useful for visualisation, but not obvious this is the best way to test for differences between grid and non-grid cells, e.g. will be biased by amplitude and is looking at slopes rather than individual differences.
+
+# Recreate Figure 4F right
+```{r}
+cells_data$diff_si <- (cells_data$during_P - cells_data$during_D)/cells_data$during_P
+
+ggplot(data = cells_data, aes(grid_cell, diff_si)) +
+    geom_boxplot()
+
+```
+
+# Look at distribution of diff_si
+```{r}
+plot_hist_groups_grid_cell <- function(df, plot_var) {
+    plot_var <- sym(plot_var)
+    ggplot(df, aes(!!plot_var)) +
+        geom_histogram(aes(y = (..count..)/tapply(..count..,..PANEL..,sum)[..PANEL..])) +
+        facet_wrap(vars(grid_cell))
+}
+
+plot_hist_groups_grid_cell(cells_data, "diff_si")
+```
+
+# Evaluate normality
+```{r}
+qqnorm(cells_data$diff_si, pch = 1, frame = FALSE)
+qqline(cells_data$diff_si, col = "steelblue", lwd = 2)
+```
+
+# Test for difference between diff_si in G and NG groups
+```{r}
+G_NG_si_diff_full_mod <- lmer(diff_si ~ grid_cell + (1 | mouse / session_id), data = cells_data)
+
+G_NG_si_diff_null_mod <- lmer(diff_si ~ (1 | mouse / session_id), data = cells_data)
+
+
+anova(G_NG_si_diff_full_mod, G_NG_si_diff_null_mod)
+```
+
+# Test for differences of each factor from zero
+```{r}
+G_NG_si_diff_emm <- emmeans(G_NG_si_diff_full_mod, "grid_cell")
+
+plot(G_NG_si_diff_emm)
+
+summary(G_NG_si_diff_emm, infer = c(TRUE, TRUE))
+```

@@ -1,0 +1,276 @@
+---
+title: "Compare firing properties across session-level firing modes for stable cells"
+author: "Matt Nolan"
+date: "01/11/2023"
+output: html_document
+---
+
+# Setup
+```{r}
+library(tidyverse)
+library(lme4)
+library(emmeans)
+```
+
+
+# load data
+```{r}
+cells_data <- readRDS(file = "cells_df_singular_values.Rda")
+cells_data <- filter(cells_data, grid_cell == "TRUE")
+cells_data$Lomb_classifier_ <- as_factor(cells_data$Lomb_classifier_)
+```
+
+# look at data
+Replicate Figure 3 Figure Supplement 4.
+
+This is a similar analysis to Figure 2F, but instead of using the session based classification of TIG vs TAG, it uses stability of TIG vs TAG classification within a session.
+
+Thus, whereas in Figure 2F we use the column 'Lomb_classifier_' to group cells, here we use the following:
+rolling:proportion_encoding_X, where X is distance, null or position. These variables show how much of the session is encoded by a single mode.
+
+Cells that are "stable" have a proportion above 0.85
+
+First extract classifications for each cell
+```{r}
+cells_data <- cells_data %>%
+    rename(
+        prop_TI = 'rolling:proportion_encoding_distance',
+        prop_TA = 'rolling:proportion_encoding_position'
+    )
+
+thresh <- 0.85
+
+cells_data$stable_cat <- "None"
+cells_data$stable_cat[cells_data$prop_TI > thresh] <- "TI"
+cells_data$stable_cat[cells_data$prop_TA > thresh] <- "TA"
+```
+
+Firing rate
+```{r}
+ggplot(cells_data, aes(stable_cat, mean_firing_rate_vr)) +
+    geom_boxplot()
+```
+
+Spatial information (bits / s)
+```{r}
+ggplot(cells_data, aes(stable_cat, spatial_information_score_Isec_vr)) +
+    geom_boxplot()
+```
+
+Spatial information (bits / s)
+Distribution is more symmetrical with log transformation
+```{r}
+ggplot(cells_data, aes(stable_cat, log(spatial_information_score_Isec_vr))) +
+    geom_boxplot()
+```
+
+Spatial information (bits / spike)
+This is less informative as doesn't account for differences in firing rate.
+```{r}
+ggplot(cells_data, aes(stable_cat, spatial_information_score_Ispike_vr)) +
+    geom_boxplot()
+```
+
+
+
+# Evaluate normality
+log transformation improves fit
+```{r}
+qqnorm(log(cells_data$mean_firing_rate_vr), pch = 1, frame = FALSE)
+qqline(log(cells_data$mean_firing_rate_vr), col = "steelblue", lwd = 2)
+```
+
+```{r}
+qqnorm(log(cells_data$spatial_information_score_Isec_vr), pch = 1, frame = FALSE)
+qqline(log(cells_data$spatial_information_score_Isec_vr), col = "steelblue", lwd = 2)
+```
+
+
+```{r}
+qqnorm(cells_data$ML_SNRs, pch = 1, frame = FALSE)
+qqline(cells_data$ML_SNRs, col = "steelblue", lwd = 2)
+```
+
+```{r}
+qqnorm(log(cells_data$ML_peak_width), pch = 1, frame = FALSE)
+qqline(log(cells_data$ML_peak_width), col = "steelblue", lwd = 2)
+```
+
+
+
+And some summary statistics
+```{r}
+cells_data %>% group_by(stable_cat) %>% reframe(mean = mean(spatial_information_score_Isec_vr), stdev = sd(spatial_information_score_Isec_vr))
+
+cells_data %>% group_by(stable_cat) %>% reframe(mean = mean(mean_firing_rate_vr), stdev = sd(mean_firing_rate_vr))
+
+cells_data %>% group_by(stable_cat) %>% reframe(mean = mean(ML_SNRs), stdev = sd(ML_SNRs))
+```
+
+
+
+
+## Spatial information
+
+# fit model and compare to a null model
+Choose a gamma family as the data is continuous and > 0.
+```{r}
+si_full_mod <- glmer(spatial_information_score_Isec_vr ~ stable_cat + (1 | mouse / session_id), data = cells_data, family = Gamma)
+
+summary(si_full_mod)
+
+si_null_mod <- glmer(spatial_information_score_Isec_vr ~ (1 | mouse / session_id), data = cells_data, family = Gamma)
+
+summary(si_null_mod)
+
+anova(si_full_mod, si_null_mod)
+```
+
+Or fit log transformed data with linear mixed effect model.
+```{r}
+si_full_mod <- lmer(log(spatial_information_score_Isec_vr) ~ stable_cat + (1 | mouse / session_id), data = cells_data)
+
+summary(si_full_mod)
+
+si_null_mod <- lmer(log(spatial_information_score_Isec_vr) ~ (1 | mouse / session_id), data = cells_data)
+
+summary(si_null_mod)
+
+anova(si_full_mod, si_null_mod)
+```
+
+
+
+# Use emmeans package to evaluate marginal means from the fit model
+```{r}
+si_emm <- emmeans(si_full_mod, "stable_cat")
+
+pairs(si_emm)
+
+plot(si_emm)
+```
+
+
+
+
+## Spike rate
+# fit model and compare to a null model
+Could choose a gamma family as the data is continuous and > 0
+```{r}
+fr_full_mod <- glmer(mean_firing_rate_vr ~ stable_cat + (1 | mouse / session_id), data = cells_data, family = Gamma)
+
+summary(fr_full_mod)
+
+fr_null_mod <- glmer(mean_firing_rate_vr ~ (1 | mouse / session_id), data = cells_data, family = Gamma)
+
+summary(fr_null_mod)
+
+anova(fr_full_mod, fr_null_mod)
+```
+
+Or instead fit linear mixed effect model to log transformed values
+```{r}
+fr_full_mod <- lmer(log(mean_firing_rate_vr) ~ stable_cat + (1 | mouse / session_id), data = cells_data)
+
+summary(fr_full_mod)
+
+fr_null_mod <- lmer(log(mean_firing_rate_vr) ~ (1 | mouse / session_id), data = cells_data)
+
+summary(fr_null_mod)
+
+anova(fr_full_mod, fr_null_mod)
+```
+
+
+# Use emmeans package to evaluate marginal means from the fit model
+```{r}
+fr_emm <- emmeans(fr_full_mod, "stable_cat")
+
+pairs(fr_emm)
+
+plot(fr_emm)
+```
+
+
+## ML_SNRs
+# fit model and compare to a null model
+Choose a gamma family as the data is continuous and > 0.
+```{r}
+SNRs_full_mod <- glmer(ML_SNRs ~ stable_cat + (1 | mouse / session_id), data = cells_data, family = Gamma)
+
+summary(SNRs_full_mod)
+
+SNRs_null_mod <- glmer(ML_SNRs ~ (1 | mouse / session_id), data = cells_data, family = Gamma)
+
+summary(SNRs_null_mod)
+
+anova(SNRs_full_mod, SNRs_null_mod)
+```
+
+Or use log transformed data.linear model.
+```{r}
+SNRs_full_mod <- lmer(ML_SNRs ~ stable_cat + (1 | mouse / session_id), data = cells_data)
+
+summary(SNRs_full_mod)
+
+SNRs_null_mod <- lmer(ML_SNRs ~ (1 | mouse / session_id), data = cells_data)
+
+summary(SNRs_null_mod)
+
+anova(SNRs_full_mod, SNRs_null_mod)
+```
+
+# Use emmeans package to evaluate marginal means from the fit model
+```{r}
+SNRs_emm <- emmeans(SNRs_full_mod, "stable_cat")
+
+pairs(SNRs_emm)
+
+plot(SNRs_emm)
+
+```
+
+
+
+## ML_peak_width
+# fit model and compare to a null model
+Choose a gamma family as the data is continuous and > 0.
+```{r}
+pw_full_mod <- glmer(ML_peak_width ~ stable_cat + (1 | mouse / session_id), data = cells_data, family = Gamma)
+
+summary(pw_full_mod)
+
+pw_null_mod <- glmer(ML_peak_width ~ (1 | mouse / session_id), data = cells_data, family = Gamma)
+
+summary(pw_null_mod)
+
+anova(pw_full_mod, pw_null_mod)
+```
+
+Or use log transformed data.
+```{r}
+pw_full_mod <- lmer(log(ML_peak_width) ~ stable_cat + (1 | mouse / session_id), data = cells_data)
+
+summary(pw_full_mod)
+
+pw_null_mod <- lmer(log(ML_peak_width) ~ (1 | mouse / session_id), data = cells_data)
+
+summary(pw_null_mod)
+
+anova(pw_full_mod, pw_null_mod)
+```
+
+# Use emmeans package to evaluate marginal means from the fit model
+```{r}
+pw_emm <- emmeans(pw_full_mod, "stable_cat")
+
+pairs(pw_emm)
+
+plot(pw_emm)
+
+```
+
+
+
+
+

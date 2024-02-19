@@ -1,0 +1,95 @@
+---
+title: "Compare firing properties across firing modes classified at the single-trial level"
+author: "Matt Nolan"
+date: "01/11/2023"
+output: html_document
+---
+
+# Setup
+```{r}
+library(tidyverse)
+library(lme4)
+library(emmeans)
+```
+
+
+# load data
+```{r}
+# cells_data <- readRDS(file = "cells_df.Rda")
+cells_data <- readRDS(file = "cells_df_singular_values.Rda") %>%
+    rename (
+        TAG_si = "rolling:position_spatial_information_scores_Isec",
+        TIG_si = "rolling:distance_spatial_information_scores_Isec",
+        TAG_fr = "rolling:position_mean_firing_rate",
+        TIG_fr = "rolling:distance_mean_firing_rate"
+        )
+cells_data <- filter(cells_data, grid_cell == "TRUE")
+cells_data$Lomb_classifier_ <- as_factor(cells_data$Lomb_classifier_)
+
+### make tidy frame
+cells_reform <- select(cells_data, cluster_id, session_id, mouse, TAG_si, TIG_si) %>%
+    pivot_longer(TAG_si:TIG_si, names_to = "mode", values_to = "si")
+
+### Add firing rates
+frs <- select(cells_data, TAG_fr, TIG_fr) %>%
+    pivot_longer(TAG_fr:TIG_fr, names_to = "mode", values_to = "fr")
+
+cells_reform$fr <- frs$fr
+
+cells_reform$mode <- as.factor(cells_reform$mode)
+
+```
+
+# look at data
+Replicate Figure 3G. 
+
+```{r}
+ggplot(cells_reform, aes(mode, si)) +
+    geom_boxplot()
+```
+
+```{r}
+ggplot(cells_reform, aes(mode, fr)) +
+    geom_boxplot()
+```
+
+# Evaluate normality
+log transformation improves fit
+```{r}
+qqnorm(log(cells_reform$si), pch = 1, frame = FALSE)
+qqline(log(cells_reform$si), col = "steelblue", lwd = 2)
+```
+
+```{r}
+qqnorm(log(cells_reform$fr), pch = 1, frame = FALSE)
+qqline(log(cells_reform$fr), col = "steelblue", lwd = 2)
+```
+
+
+# Evaluate difference between tack-anchored and task-independent trials
+```{r}
+si_full_mod <- lmer(data = cells_reform, log(si) ~ mode + (1 | mouse / session_id))
+
+si_null_mod <- lmer(data = cells_reform, log(si) ~ (1 | mouse / session_id))
+
+anova(si_full_mod, si_null_mod)
+
+si_emm <- emmeans(si_full_mod, "mode")
+
+pairs(si_emm)
+
+
+```
+
+```{r}
+
+fr_full_mod <- lmer(data = cells_reform, log(fr) ~ mode + (1 | mouse / session_id))
+
+fr_null_mod <- lmer(data = cells_reform, log(fr) ~ (1 | mouse / session_id))
+
+anova(fr_full_mod, fr_null_mod)
+
+fr_emm <- emmeans(fr_full_mod, "mode")
+
+pairs(fr_emm)
+```

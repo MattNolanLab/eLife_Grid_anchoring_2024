@@ -1,0 +1,92 @@
+---
+title: "Comparing task-anchored vs task-independent firing as a function of task performance on a session-level"
+author: "Harry Clark"
+date: "04/04/2023"
+output: html_document
+---
+
+```{r}
+library(sjPlot)
+library(lme4)
+```
+
+# subset the data acccording to trial type
+```{r}
+spatial_firing <- readRDS(file="all_cells_for_R_longform_by_session.Rda")
+
+spatial_firing$Lomb_classifier <- replace(spatial_firing$Lomb_classifier, spatial_firing$Lomb_classifier == "Null", NA)
+spatial_firing <- na.omit(spatial_firing)
+
+spatial_firing <- spatial_firing[spatial_firing$classifier == "G",]
+
+beaconed_data <- spatial_firing[spatial_firing$trial_type == 0,]
+non_beaconed_data <- spatial_firing[spatial_firing$trial_type == 1,]
+probe_data <- spatial_firing[spatial_firing$trial_type == 2,]
+```
+
+# set up the formulas
+```{r}
+formula_full <- formula(hit ~ Lomb_classifier + (1 | mouse_id / session_id) + (0 + Lomb_classifier | mouse_id / session_id))
+formula_null <- formula(hit ~                   (1 | mouse_id / session_id) + (0 + Lomb_classifier | mouse_id / session_id))
+
+```
+
+# run glmer for beacoend trials
+```{r}
+beaconed_model_full <- lme4::glmer(formula = formula_full, 
+                      data = beaconed_data,
+                      na.action = na.exclude,
+                      family = binomial(link = "logit"),
+                      control=lme4::glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2e5)))
+
+beaconed_model_null <- lme4::glmer(formula =formula_null, 
+                      data = beaconed_data,
+                      na.action = na.exclude,
+                      family = binomial(link = "logit"),
+                      control=lme4::glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2e5)))
+```
+
+compare the full model with the null model
+```{r}
+anova(beaconed_model_full,beaconed_model_null)
+```
+
+# run glmer for nonbeacoend trials
+```{r}
+non_beaconed_model_full <- lme4::glmer(formula = formula_full, 
+                      data = non_beaconed_data,
+                      na.action = na.exclude,
+                      family = binomial(link = "logit"),
+                      control=lme4::glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2e5)))
+
+non_beaconed_model_null <- lme4::glmer(formula = formula_null, 
+                      data = non_beaconed_data,
+                      na.action = na.exclude,
+                      family = binomial(link = "logit"),
+                      control=lme4::glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2e5)))
+```
+
+compare the full model with the null model
+```{r}
+anova(non_beaconed_model_full,non_beaconed_model_null)
+```
+
+# run glmer for probe trials
+```{r}
+probe_model_full <- lme4::glmer(formula = formula_full, 
+                      data = probe_data,
+                      na.action = na.exclude,
+                      family = binomial(link = "logit"),
+                      control=lme4::glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2e5)))
+
+probe_model_null <- lme4::glmer(formula = formula_null, 
+                      data = probe_data,
+                      na.action = na.exclude,
+                      family = binomial(link = "logit"),
+                      control=lme4::glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2e5)))
+```
+
+compare the full model with the null model
+```{r}
+anova(probe_model_full,probe_model_null)
+```
