@@ -1762,64 +1762,6 @@ def main():
     # load dataframe, each row represents one cell
     combined_df = pd.read_pickle("/mnt/datastore/Harry/Grid_anchoring_eLife_2023/real/data/combined_cohorts.pkl")
 
-    """
-    combined_df = pd.DataFrame()
-    combined_df = pd.concat([combined_df, pd.read_pickle("/mnt/datastore/Harry/Grid_anchoring_eLife_2023/real/data/combined_cohort6.pkl")], ignore_index=True)
-    combined_df = pd.concat([combined_df, pd.read_pickle("/mnt/datastore/Harry/Grid_anchoring_eLife_2023/real/data/combined_cohort7.pkl")], ignore_index=True)
-    combined_df = pd.concat([combined_df, pd.read_pickle("/mnt/datastore/Harry/Grid_anchoring_eLife_2023/real/data/combined_cohort8.pkl")], ignore_index=True)
-
-    # TODO DELETE ONCE DONE ONCE #######
-    collumn_names_to_keep = ['cluster_id', 'primary_channel', 'session_id', 'session_id_vr', 'session_id_of',
-                             'recording_length_sampling_points', 'recording_length_seconds',
-                             'tetrode', 'number_of_spikes', 'mean_firing_rate_of', 'isolation', 'noise_overlap',
-                             'peak_snr', 'peak_amp', 'snippet_peak_to_trough',
-                             'speed_score', 'hd_score', 'spatial_information_score', 'grid_spacing', 'grid_score',
-                             'border_score',
-                             'rate_map_correlation_first_vs_second_half',
-                             'percent_excluded_bins_rate_map_correlation_first_vs_second_half_p',
-                             'firing_maps_of', 'occupancy_maps_of', 'rate_map_autocorrelogram_of', 
-                             'grid_cell', 'border_cell', 'hd_cell', 'spatial_cell', 'speed_cell', 'classifier',
-                             'spatial_information_score_Isec_vr',
-                             'spatial_information_score_Ispike_vr', 'firing_times_vr', 'fr_binned_in_space_smoothed',
-                             'mean_firing_rate_vr', 'n_trials', 'track_length',
-                             'timestamp', 'date', 'mouse', 'recording_day',
-                             'Lomb_classifier_', 'ML_Freqs', 'ML_SNRs',
-                             'MOVING_LOMB_all_centre_trials', 'MOVING_LOMB_all_powers', 'MOVING_LOMB_avg_power',
-                             'MOVING_LOMB_freqs',
-                             'rolling:block_lengths', 'rolling:block_lengths_shuffled',
-                             'rolling:distance_mean_firing_rate',
-                             'rolling:distance_spatial_information_scores',
-                             'rolling:distance_spatial_information_scores_Isec',
-                             'rolling:position_mean_firing_rate',
-                             'rolling:position_spatial_information_scores',
-                             'rolling:position_spatial_information_scores_Isec',
-                             'rolling:proportion_encoding_distance',
-                             'rolling:proportion_encoding_null',
-                             'rolling:proportion_encoding_position',
-                             'rolling:rolling_centre_trials',
-                             'rolling:rolling_classifiers',
-                             'rolling:grid_code_global',
-                             'rolling_threshold',
-                             'rolling:classifier_by_trial_number',
-                             'behaviour_hit_try_miss',
-                             'behaviour_trial_numbers',
-                             'behaviour_trial_types',
-                             'agreement_between_cell_and_global',
-                             'agreement_between_cell_and_grid_global',
-                             'field_locations',
-                             'field_trial_numbers',
-                             'stop_locations',
-                             'stop_trial_numbers',
-                             'power_threshold',
-                             'spatial_information_during_D',
-                             'spatial_information_during_P',
-                             'speeds_binned_in_space_smoothed',
-                             'rolling:position_correlation_by_trial_number_t2tmethod']
-    combined_df = combined_df[collumn_names_to_keep]
-    combined_df.to_pickle("/mnt/datastore/Harry/Grid_anchoring_eLife_2023/real/data/combined_cohorts.pkl")
-    # TODO DELETE ONCE DONE ONCE #######
-    """
-
     # remove artefacts, low firing rates in the open field, sessions with non 200cm track lengths and sessions with less than 10 trials
     combined_df = combined_df[combined_df["snippet_peak_to_trough"] < 500] # uV
     combined_df = combined_df[combined_df["mean_firing_rate_of"] > 0.2] # Hz
