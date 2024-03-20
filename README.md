@@ -1,5 +1,5 @@
 # eLife_Grid_anchoring_2024
-Code for reproducing plots in Clark and Nolan 2024
+Code for reproducing plots in Clark and Nolan 2024 (eLife2024;12:RP89356 DOI: https://doi.org/10.7554/eLife.89356.3)
 
 In order to run the code:
 
